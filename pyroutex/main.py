@@ -177,6 +177,16 @@ async def process_node(
         ipr_stack[ipr_idx].link, present=True, **spec
     )
 
+    # post-init: enforce state
+    #
+    # e.g. veth peers should be set here
+    #
+    await ipr_stack[-1].link(
+        'set',
+        index=await ipr_stack[-1].link_lookup(ifname),
+        state=spec['state'],
+    )
+
     # setup VRF
     if subgraph_type == 'vrf':
         logging.info(f'ensure vrf={subgraph}')
