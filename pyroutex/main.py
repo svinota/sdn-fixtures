@@ -159,18 +159,18 @@ async def process_node(
             peer['net_ns_fd'] = subgraph
         spec['peer'] = peer
         ipr_idx = -2
-        master = []
-        for uplink in graph.successors(name):
-            if get_node_attribute(graph, uplink, 'type') != 'interface':
-                continue
-            if get_node_attribute(graph, uplink, 'kind') == 'bridge':
-                master = await ipr_stack[-2].link_lookup(
-                    get_node_attribute(graph, uplink, 'label')
-                )
-                break
-        if master:
-            spec['master'] = master[0]
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
+    master = []
+    for uplink in graph.successors(name):
+        if get_node_attribute(graph, uplink, 'type') != 'interface':
+            continue
+        if get_node_attribute(graph, uplink, 'kind') == 'bridge':
+            master = await ipr_stack[ipr_idx].link_lookup(
+                get_node_attribute(graph, uplink, 'label')
+            )
+            break
+    if master:
+        spec['master'] = master[0]
     logging.info(f'ensure interface {spec}')
     interface = await ipr_stack[ipr_idx].ensure(
         ipr_stack[ipr_idx].link, present=True, **spec
