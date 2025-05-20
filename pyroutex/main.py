@@ -192,12 +192,12 @@ async def process_node(
         await ipr_stack[-1].link('set', index=interface[0], master=vrf[0])
 
     for address in get_interface_addresses(graph, name):
-        logging.info(f'interface {spec["ifname"]} address: {address}')
-        await ipr_stack[ipr_idx].ensure(
-            ipr_stack[ipr_idx].addr,
+        logging.info(f'interface {name} address: {address}')
+        await ipr_stack[-1].ensure(
+            ipr_stack[-1].addr,
             present=True,
             address=address,
-            index=interface[0],
+            index=await ipr_stack[-1].link_lookup(ifname),
         )
     for pre_node in graph.predecessors(name):
         await process_node(ipr_stack, graph, pre_node)
