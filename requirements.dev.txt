@@ -1,3 +1,4 @@
+git+https://github.com/svinota/pyroute2.git@master
 networkx
 networkx-stubs
 pydot
