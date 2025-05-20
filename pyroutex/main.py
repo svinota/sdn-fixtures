@@ -119,6 +119,7 @@ async def process_node(
     subgraph_type: str
     kind: str
     ifname: str
+    ipr_idx: int
 
     kind = get_node_attribute(graph, name, 'kind')
     ifname = get_node_attribute(graph, name, 'label')
@@ -134,14 +135,15 @@ async def process_node(
     if kind is not None:
         spec['kind'] = kind
 
+    ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
         logging.info(f'ensure netns={subgraph}')
         ipr_stack.append(AsyncIPRoute(netns=subgraph))
         await ipr_stack[-1].setup_endpoint()
+        ipr_idx = -2
 
     # setup veth
-    ipr_idx = -1
     if kind == 'veth':
         link = [
             x.get('link')
@@ -149,16 +151,15 @@ async def process_node(
             if x.get('ifname') == ifname
         ]
         if link:
-            spec['ifname'] = (await ipr_stack[-2].link('get', index=link))[
-                0
-            ].get('ifname')
+            spec['ifname'] = (
+                await ipr_stack[ipr_idx].link('get', index=link)
+            )[0].get('ifname')
         else:
             spec['ifname'] = uifname()
         peer = {'ifname': ifname}
         if subgraph_type == 'netns':
             peer['net_ns_fd'] = subgraph
         spec['peer'] = peer
-        ipr_idx = -2
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
     master = []
     for uplink in graph.successors(name):
