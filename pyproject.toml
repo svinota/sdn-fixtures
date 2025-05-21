@@ -32,12 +32,6 @@ urls = { homepage = "https://github.com/svinota/pyroutex" }
 [project.scripts]
 pyroute2-dot = "pyroutex.main:run"
 
-[tool.setuptools]
-package-dir = { "" = "pyroutex" }
-
-[tool.setuptools.packages.find]
-where = ["pyroutex"]
-
 [[tool.mypy.overrides]]
 module = ["pytest.*", "pytest_asyncio.*", "pyroute2.*"]
 ignore_missing_imports = true
