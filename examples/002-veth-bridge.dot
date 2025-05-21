@@ -1,5 +1,15 @@
 digraph G {
 
+    # In a veth definition, it is enough to describe the peer — the local
+    # port will be assigned an automatic name. An edge (veth -> bridge)
+    # instructs the script to connect the local port to the bridge.
+
+    # If you want to display IP address information on the diagram, you
+    # can use a node name like "{name}:ip" with shape=note — for example,
+    # "port0:ip" and "br0:ip". You must also create an edge from "{name}"
+    # to "{name}:ip" in order to associate the address information with
+    # the interface.
+
     "port0" [type=interface, kind=veth, label="test0"];
     "port0:ip" [shape=note, label="10.100.0.11/24\n10.100.0.12/24"];
     "port0" -> "port0:ip" [style=dashed, dir=none];

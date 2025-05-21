@@ -1,5 +1,9 @@
 digraph G {
 
+    # Using a subgraph, you can place a veth peer in a network namespace.
+    # The label is used as its name, while type=netns tells the script
+    # that it represents a network namespace.
+
     subgraph cluster_n0 {
         label="test-netns";
         type=netns;
@@ -8,6 +12,8 @@ digraph G {
         "port0:ip" [shape=note, label="10.100.0.11/24\n10.100.0.12/24"];
         "port0" -> "port0:ip" [style=dashed, dir=none];
     }
+
+    # The bridge in this example is located in the main network namespace.
 
     "br0" [type=interface, kind=bridge, label="br0"];
     "br0:ip" [shape=note, label="10.100.0.1/24\n10.100.0.2/24"];

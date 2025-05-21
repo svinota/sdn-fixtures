@@ -1,9 +1,15 @@
 digraph G {
 
+    # A directed graph is used to describe relationships between network
+    # entities — this allows us to identify terminal nodes and build the
+    # topology starting from them.
+
+    # The simplest graph consists of a single node.
+    # Here we define a dummy interface with two addresses.
     "test0" [
-        type=interface,      # required for interface nodes
-        kind=dummy,          # required to create new interfaces
-        label="test0",       # label defines ifname
-        ipaddr="10.100.0.11/24 10.100.0.12/24"  # separators -- space or \n
+        type=interface,                         # required for interface nodes
+        kind=dummy,                             # required to create new interfaces
+        label="test0",                          # label defines ifname
+        ipaddr="10.100.0.11/24 10.100.0.12/24"  # separators: space or \n
     ];
 }

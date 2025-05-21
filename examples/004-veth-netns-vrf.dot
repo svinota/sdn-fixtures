@@ -1,21 +1,34 @@
 digraph G {
 
+    # Here we add VRF and some fancy visual stuff
+    node [fillcolor="#ffffff", style=filled]
+
     subgraph cluster_v0 {
         label="vrf1020";
         type=vrf;
+        bgcolor="#f0f0f0";
 
         subgraph cluster_n0 {
             label="test-netns";
             type=netns;
+            bgcolor="#c0c0c0";
 
             "port0" [type=interface, kind=veth, label="test0"];
-            "port0:ip" [shape=note, label="10.100.0.11/24\n10.100.0.12/24"];
             "port0" -> "port0:ip" [style=dashed, dir=none];
+            "port0:ip" [
+                shape=note,
+                label="10.100.0.11/24\n10.100.0.12/24",
+                fontsize=8,
+            ];
         }
 
         "br0" [type=interface, kind=bridge, label="br0"];
-        "br0:ip" [shape=note, label="10.100.0.1/24\n10.100.0.2/24"];
         "br0" -> "br0:ip" [style=dashed, dir=none];
+        "br0:ip" [
+            shape=note,
+            label="10.100.0.1/24",
+            fontsize=8,
+        ];
 
         "port0" -> "br0";
     }
