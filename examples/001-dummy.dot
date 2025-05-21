@@ -1,0 +1,9 @@
+digraph G {
+
+    "test0" [
+        type=interface,      # required for interface nodes
+        kind=dummy,          # required to create new interfaces
+        label="test0",       # label defines ifname
+        ipaddr="10.100.0.11/24 10.100.0.12/24"  # separators -- space or \n
+    ];
+}
