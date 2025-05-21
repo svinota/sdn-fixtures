@@ -7,7 +7,7 @@ from collections import deque, namedtuple
 import pydot
 from networkx import DiGraph
 from pydot import Dot, Edge, Node, Subgraph
-from pyroute2 import AsyncIPRoute
+from pyroute2 import AsyncIPRoute, netns
 from pyroute2.common import uifname
 
 logging.basicConfig(level=logging.INFO)
@@ -84,7 +84,7 @@ def parse_addresses_from(graph: DiGraph, name: str, label: str):
         shlex.split(config.obj_dict.get('attributes', {}).get(label, ''))
         or ['']
     )[0]
-    for address in address_str.split('\\n'):
+    for address in address_str.replace(' ', '\\n').split('\\n'):
         if len(address):
             yield address
 
@@ -164,13 +164,19 @@ async def process_node(
     ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
-        logging.info(f'ensure netns={subgraph}')
-        ipr_stack.append(AsyncIPRoute(netns=subgraph))
-        await ipr_stack[-1].setup_endpoint()
-        ipr_idx = -2
+        if present:
+            logging.info(f'ensure netns={subgraph}')
+            ipr_stack.append(AsyncIPRoute(netns=subgraph))
+            await ipr_stack[-1].setup_endpoint()
+            ipr_idx = -2
+        else:
+            try:
+                netns.remove(subgraph)
+            except FileNotFoundError:
+                pass
 
     # setup veth
-    if kind == 'veth':
+    if present and kind == 'veth':
         link = [
             x.get('link')
             async for x in await ipr_stack[-1].link('dump')
@@ -196,7 +202,7 @@ async def process_node(
                 get_node_attribute(graph, uplink, 'label')
             )
             break
-    if master:
+    if master and present:
         spec['master'] = master[0]
     logging.info(f'ensure interface {spec}')
     interface = await ipr_stack[ipr_idx].ensure(
@@ -207,11 +213,12 @@ async def process_node(
     #
     # e.g. veth peers should be set here
     #
-    await ipr_stack[-1].link(
-        'set',
-        index=await ipr_stack[-1].link_lookup(ifname),
-        state=spec['state'],
-    )
+    if present:
+        await ipr_stack[-1].link(
+            'set',
+            index=await ipr_stack[-1].link_lookup(ifname),
+            state=spec['state'],
+        )
 
     # setup VRF
     if subgraph_type == 'vrf':
@@ -226,16 +233,18 @@ async def process_node(
                 'state': 'up',
             },
         )
-        await ipr_stack[-1].link('set', index=interface[0], master=vrf[0])
+        if present:
+            await ipr_stack[-1].link('set', index=interface[0], master=vrf[0])
 
-    for address in get_interface_addresses(graph, name):
-        logging.info(f'interface {name} address: {address}')
-        await ipr_stack[-1].ensure(
-            ipr_stack[-1].addr,
-            present=present,
-            address=address,
-            index=await ipr_stack[-1].link_lookup(ifname),
-        )
+    if present:
+        for address in get_interface_addresses(graph, name):
+            logging.info(f'interface {name} address: {address}')
+            await ipr_stack[-1].ensure(
+                ipr_stack[-1].addr,
+                present=present,
+                address=address,
+                index=await ipr_stack[-1].link_lookup(ifname),
+            )
     for pre_node in graph.predecessors(name):
         await process_node(ipr_stack, graph, pre_node, present)
 
