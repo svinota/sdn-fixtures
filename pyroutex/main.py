@@ -1,8 +1,8 @@
+import argparse
 import asyncio
 import logging
 import shlex
-import sys
-from collections import deque
+from collections import deque, namedtuple
 
 import pydot
 from networkx import DiGraph
@@ -12,15 +12,21 @@ from pyroute2.common import uifname
 
 logging.basicConfig(level=logging.INFO)
 
+Qname = namedtuple('Qname', ('ifname', 'section'))
+
 
 def get_node_attribute(graph: DiGraph, name: str, attr: str) -> str:
-    return graph.nodes[name]['config'].obj_dict.get('attributes', {}).get(attr)
+    return normalize_name(
+        graph.nodes[name]['config']
+        .obj_dict.get('attributes', {})
+        .get(attr, '')
+    )
 
 
 def get_subgraph_label(subgraph: Subgraph) -> str:
-    return shlex.split(
+    return normalize_name(
         subgraph.obj_dict.get('attributes', {}).get('label', '')
-    )[0]
+    )
 
 
 def get_subgraph_type(subgraph: Subgraph) -> str:
@@ -34,7 +40,9 @@ def get_subgraph_type(subgraph: Subgraph) -> str:
 
 
 def normalize_name(name: str) -> str:
-    return shlex.split(name)[0]
+    if len(name):
+        return shlex.split(name)[0]
+    return name
 
 
 def get_subgraph_attribute(graph: DiGraph, name: str) -> tuple[str, str]:
@@ -43,8 +51,6 @@ def get_subgraph_attribute(graph: DiGraph, name: str) -> tuple[str, str]:
     if subgraph is None:
         return ('', '')
     return (get_subgraph_label(subgraph), get_subgraph_type(subgraph))
-
-    return (attrs.get('subgraph', ''), attrs.get('subgraph_type', ''))
 
 
 def set_subgraph_attribute(
@@ -94,7 +100,7 @@ def get_interface_addresses(graph: DiGraph, name: str):
 
 
 async def process_node(
-    ipr_stack: deque[AsyncIPRoute], graph: DiGraph, name: str
+    ipr_stack: deque[AsyncIPRoute], graph: DiGraph, name: str, present: bool
 ) -> None:
     '''Process an interface and upwards.
 
@@ -112,6 +118,26 @@ async def process_node(
     '''
     # we start from the interface
     if get_node_attribute(graph, name, 'type') != 'interface':
+        qname_args = name.split(':')
+        if len(qname_args) != 2:
+            return
+        qname = Qname(*qname_args)
+        if (
+            qname.section == 'ip'
+            and get_node_attribute(graph, name, 'shape') == 'note'
+        ):
+            if (
+                len(
+                    [
+                        x
+                        for x in graph.successors(qname.ifname)
+                        if get_node_attribute(graph, x, 'shape') != 'note'
+                    ]
+                )
+                == 0
+            ):
+                await process_node(ipr_stack, graph, qname.ifname, present)
+                return
         logging.info(f'skip node {name}')
         return
     spec: dict[str, int | str | dict[str, str]]
@@ -174,7 +200,7 @@ async def process_node(
         spec['master'] = master[0]
     logging.info(f'ensure interface {spec}')
     interface = await ipr_stack[ipr_idx].ensure(
-        ipr_stack[ipr_idx].link, present=True, **spec
+        ipr_stack[ipr_idx].link, present=present, **spec
     )
 
     # post-init: enforce state
@@ -192,7 +218,7 @@ async def process_node(
         logging.info(f'ensure vrf={subgraph}')
         vrf = await ipr_stack[-1].ensure(
             ipr_stack[-1].link,
-            present=True,
+            present=present,
             **{
                 'ifname': subgraph,
                 'kind': 'vrf',
@@ -206,12 +232,12 @@ async def process_node(
         logging.info(f'interface {name} address: {address}')
         await ipr_stack[-1].ensure(
             ipr_stack[-1].addr,
-            present=True,
+            present=present,
             address=address,
             index=await ipr_stack[-1].link_lookup(ifname),
         )
     for pre_node in graph.predecessors(name):
-        await process_node(ipr_stack, graph, pre_node)
+        await process_node(ipr_stack, graph, pre_node, present)
 
     # cleanup netns
     if subgraph_type == 'netns':
@@ -224,7 +250,14 @@ async def main() -> None:
     nx_graph: DiGraph = DiGraph()
     ipr_stack: deque[AsyncIPRoute] = deque([AsyncIPRoute()])
 
-    with open(sys.argv[1], "r") as f:
+    aparser = argparse.ArgumentParser(
+        prog='pyroute2-dot', description='apply dot files med SND definitions'
+    )
+    aparser.add_argument('action')
+    aparser.add_argument('filename')
+    args = aparser.parse_args()
+
+    with open(args.filename, "r") as f:
         data = f.read()
 
     pydot_graph_list = pydot.graph_from_dot_data(data)
@@ -237,11 +270,17 @@ async def main() -> None:
         for n in nx_graph.nodes:
             if nx_graph.out_degree(n) > 0:
                 continue
-            await process_node(ipr_stack, nx_graph, n)
+            await process_node(
+                ipr_stack, nx_graph, n, args.action.lower() != 'down'
+            )
     finally:
         for ipr in ipr_stack:
             ipr.close()
 
 
-if __name__ == '__main__':
+def run() -> None:
     asyncio.run(main())
+
+
+if __name__ == '__main__':
+    run()
