@@ -2,6 +2,42 @@
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "pyroutex"
+version = "0.0.2"
+description = "Declarative SDN config"
+readme = { file = "README.rst", content-type = "text/x-rst" }
+authors = [
+    { name = "Peter Saveliev", email = "peter@svinota.eu" }
+]
+license = "Apache-2.0"
+keywords = ["sdn", "networking", "configuration"]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Development Status :: 4 - Beta",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
+    "Operating System :: POSIX :: Linux",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry"
+]
+urls = { homepage = "https://github.com/svinota/pyroutex" }
+
+[project.scripts]
+pyroute2-dot = "pyroutex.main:run"
+
+[tool.setuptools]
+package-dir = { "" = "pyroutex" }
+
+[tool.setuptools.packages.find]
+where = ["pyroutex"]
+
 [[tool.mypy.overrides]]
 module = ["pytest.*", "pytest_asyncio.*", "pyroute2.*"]
 ignore_missing_imports = true

@@ -134,7 +134,6 @@ def setup_venv_repo(session):
     for item in (
         ('tests', tmpdir),
         ('noxfile.py', tmpdir),
-        ('VERSION', tmpdir),
         ('CHANGELOG.rst', tmpdir),
     ):
         session.run('cp', '-a', *item, external=True)
@@ -162,13 +161,6 @@ def setup_venv_docs(session, config=None):
         )
     ]
     return tmpdir
-
-
-@nox.session(name='test-platform')
-def test_platform(session):
-    '''Test platform capabilities. Requires root to run.'''
-    setup_venv_common(session)
-    session.run('pyroute2-test-platform')
 
 
 @nox.session(python='python3.10')

@@ -4,7 +4,7 @@
 #
 #
 python ?= $(shell util/find_python.sh)
-releaseTag ?= $(shell git describe --tags --abbrev=0)
+releaseTag ?= $(shell git describe --tags --abbrev=0 2>/dev/null)
 releaseDescription := $(shell git tag -l -n1 ${releaseTag} | sed 's/[0-9. ]\+//')
 noxboot ?= ~/.venv-boot
 
@@ -48,6 +48,8 @@ git-clean:
 clean:
 	@rm -rf dist
 	@rm -rf build
+	@rm -rf __pycache__
+	@rm -rf *.egg-info
 
 .PHONY: docs
 docs:
@@ -73,16 +75,13 @@ release: dist
 		${releaseTag} \
 		./dist/*${releaseTag}*
 
-.PHONY: setup
-setup:
-	$(MAKE) VERSION
 
 .PHONY: dist
-dist: setup
+dist:
 	$(call nox,-e build)
 
 .PHONY: install
-install: setup
+install:
 	$(MAKE) uninstall
 	$(MAKE) clean
 	$(call nox,-e build)
