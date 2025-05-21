@@ -2,7 +2,9 @@ import argparse
 import asyncio
 import logging
 import shlex
+import urllib.request
 from collections import deque, namedtuple
+from urllib.parse import urlparse
 
 import pydot
 from networkx import DiGraph
@@ -253,6 +255,14 @@ async def process_node(
         ipr_stack.pop().close()
 
 
+def dot_source(source):
+    parsed = urlparse(source)
+    if parsed.scheme in ('http', 'https'):
+        return urllib.request.urlopen(source)
+    else:
+        return open(source, 'rb')
+
+
 async def main() -> None:
     pydot_graph_list: list[Dot] | None
     pydot_graph: Dot
@@ -266,8 +276,8 @@ async def main() -> None:
     aparser.add_argument('filename')
     args = aparser.parse_args()
 
-    with open(args.filename, "r") as f:
-        data = f.read()
+    with dot_source(args.filename) as f:
+        data = f.read().decode('utf-8')
 
     pydot_graph_list = pydot.graph_from_dot_data(data)
     if pydot_graph_list is not None:
