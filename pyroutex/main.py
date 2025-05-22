@@ -19,7 +19,8 @@ Qname = namedtuple('Qname', ('ifname', 'section'))
 
 def get_node_attribute(graph: DiGraph, name: str, attr: str) -> str:
     return normalize_name(
-        graph.nodes[name]['config']
+        graph.nodes[name]
+        .get('config', namedtuple('config', ('obj_dict',))({}))
         .obj_dict.get('attributes', {})
         .get(attr, '')
     )
@@ -89,6 +90,13 @@ def parse_addresses_from(graph: DiGraph, name: str, label: str):
     for address in address_str.replace(' ', '\\n').split('\\n'):
         if len(address):
             yield address
+
+
+def get_interface_name(graph: DiGraph, name: str) -> str:
+    label = get_node_attribute(graph, name, 'label')
+    if not label:
+        return name
+    return label
 
 
 def get_interface_addresses(graph: DiGraph, name: str):
@@ -195,6 +203,18 @@ async def process_node(
             peer['net_ns_fd'] = subgraph
         spec['peer'] = peer
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
+
+    # setup vxlan
+    if present and kind == 'vxlan':
+        spec['vxlan_id'] = int(get_node_attribute(graph, name, 'vxlan_id'))
+        for x in graph.successors(name):
+            if get_node_attribute(graph, x, 'kind') != 'bridge':
+                spec['vxlan_link'] = (
+                    await ipr_stack[ipr_idx].link_lookup(
+                        get_interface_name(graph, x)
+                    )
+                )[0]
+                break
     master = []
     for uplink in graph.successors(name):
         if get_node_attribute(graph, uplink, 'type') != 'interface':
