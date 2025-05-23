@@ -4,6 +4,7 @@ import logging
 import shlex
 import urllib.request
 from collections import deque, namedtuple
+from collections.abc import Generator
 from urllib.parse import urlparse
 
 import pydot
@@ -99,7 +100,7 @@ def get_interface_name(graph: DiGraph, name: str) -> str:
     return label
 
 
-def get_interface_addresses(graph: DiGraph, name: str):
+def get_interface_addresses(graph: DiGraph, name: str) -> Generator[str]:
     # yield attribute
     sub_name = f'{name}:ip'
     for address in parse_addresses_from(graph, name, 'ipaddr'):
@@ -275,29 +276,21 @@ async def process_node(
         ipr_stack.pop().close()
 
 
-def dot_source(source):
-    parsed = urlparse(source)
+def load_source(url):
+    parsed = urlparse(url)
     if parsed.scheme in ('http', 'https'):
-        return urllib.request.urlopen(source)
+        source = urllib.request.urlopen(url)
     else:
-        return open(source, 'rb')
+        source = open(url, 'rb')
+    with source:
+        return source.read().decode('utf-8')
 
 
-async def main() -> None:
+async def ensure(present: bool, data: str) -> DiGraph:
     pydot_graph_list: list[Dot] | None
     pydot_graph: Dot
     nx_graph: DiGraph = DiGraph()
     ipr_stack: deque[AsyncIPRoute] = deque([AsyncIPRoute()])
-
-    aparser = argparse.ArgumentParser(
-        prog='pyroute2-dot', description='apply dot files med SND definitions'
-    )
-    aparser.add_argument('action')
-    aparser.add_argument('filename')
-    args = aparser.parse_args()
-
-    with dot_source(args.filename) as f:
-        data = f.read().decode('utf-8')
 
     pydot_graph_list = pydot.graph_from_dot_data(data)
     if pydot_graph_list is not None:
@@ -309,16 +302,22 @@ async def main() -> None:
         for n in nx_graph.nodes:
             if nx_graph.out_degree(n) > 0:
                 continue
-            await process_node(
-                ipr_stack, nx_graph, n, args.action.lower() != 'down'
-            )
+            await process_node(ipr_stack, nx_graph, n, present)
     finally:
         for ipr in ipr_stack:
             ipr.close()
+    return nx_graph
 
 
 def run() -> None:
-    asyncio.run(main())
+    aparser = argparse.ArgumentParser(
+        prog='pyroute2-dot', description='apply dot files med SND definitions'
+    )
+    aparser.add_argument('action')
+    aparser.add_argument('filename')
+    args = aparser.parse_args()
+    data = load_source(args.filename)
+    asyncio.run(ensure(present=args.action.lower() != 'down', data=data))
 
 
 if __name__ == '__main__':

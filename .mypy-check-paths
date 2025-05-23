@@ -1,1 +1,4 @@
 sdn_fixtures/main.py
+sdn_fixtures/fixtures.py
+tests/test_core/conftest.py
+tests/test_core/test_basic.py

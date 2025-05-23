@@ -226,14 +226,7 @@ def unit(session, config):
 def test_common(session, config, module):
     setup_linux(session)
     workspace = setup_venv_dev(session, config)
-    path = f'{workspace}/tests/mocklib'
-    if config.get('fast'):
-        path += f':{workspace}'
-        session.chdir('tests')
-    session.run(
-        *options(module, config),
-        env={'WORKSPACE': workspace, 'SKIPDB': 'postgres', 'PYTHONPATH': path},
-    )
+    session.run(*options(module, config), env={'WORKSPACE': workspace})
 
 
 @nox.session(

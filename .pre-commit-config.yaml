@@ -1,4 +1,4 @@
-files: '^(noxfile.py|sdn_fixtures)'
+files: '^(noxfile.py|sdn_fixtures|tests)'
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
