@@ -1,4 +1,4 @@
-git+https://github.com/svinota/pyroutex.git@main
+git+https://github.com/svinota/sdn-fixtures.git@main
 git+https://github.com/svinota/pyroute2.git@master
 networkx
 pydot

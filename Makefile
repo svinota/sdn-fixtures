@@ -1,7 +1,5 @@
 ##
 #
-#   The pyroute2 project is dual licensed, see README.license.md for details
-#
 #
 python ?= $(shell util/find_python.sh)
 releaseTag ?= $(shell git describe --tags --abbrev=0 2>/dev/null)
@@ -85,8 +83,8 @@ install:
 	$(MAKE) uninstall
 	$(MAKE) clean
 	$(call nox,-e build)
-	${python} -m pip install dist/pyroutex-*whl ${root}
+	${python} -m pip install dist/sdn_fixtures-*whl ${root}
 
 .PHONY: uninstall
 uninstall:
-	${python} -m pip uninstall -y pyroutex
+	${python} -m pip uninstall -y sdn_fixtures

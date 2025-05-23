@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyroutex"
+name = "sdn_fixtures"
 version = "0.0.2"
 description = "Declarative SDN config"
 readme = { file = "README.rst", content-type = "text/x-rst" }
@@ -27,10 +27,10 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Intended Audience :: Telecommunications Industry"
 ]
-urls = { homepage = "https://github.com/svinota/pyroutex" }
+urls = { homepage = "https://github.com/svinota/sdn-fixtures" }
 
 [project.scripts]
-pyroute2-dot = "pyroutex.main:run"
+pyroute2-dot = "sdn_fixtures.main:run"
 
 [[tool.mypy.overrides]]
 module = ["pytest.*", "pytest_asyncio.*", "pyroute2.*"]
