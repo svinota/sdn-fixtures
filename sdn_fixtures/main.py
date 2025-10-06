@@ -281,7 +281,7 @@ async def process_node(
             **{
                 'ifname': subgraph,
                 'kind': 'vrf',
-                'vrf_table': int(subgraph.strip('vrf')),
+                'vrf_table': abs(int(subgraph.strip('vrf'))),
                 'state': 'up',
             },
         )
