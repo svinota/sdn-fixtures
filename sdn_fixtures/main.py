@@ -220,7 +220,17 @@ async def process_node(
             spec['ifname'] = uifname()
         peer = {'ifname': ifname}
         if subgraph_type == 'netns':
-            peer['net_ns_fd'] = subgraph
+            net_ns_fd = (
+                graph.nodes[name].obj_dict.get('attributes', {}).get('fd', '0')
+            )
+            try:
+                net_ns_fd = int(net_ns_fd)
+            except ValueError:
+                logging.error(f'skip node {name}: net_ns_fd={net_ns_fd}')
+                return
+            if net_ns_fd <= 0:
+                net_ns_fd = subgraph
+            peer['net_ns_fd'] = net_ns_fd
         spec['peer'] = peer
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
 
