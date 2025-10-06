@@ -17,13 +17,18 @@ logging.basicConfig(level=logging.INFO)
 
 Qname = namedtuple('Qname', ('ifname', 'section'))
 
+DEFAULT_MASK = 0xFFFFFFFF
+DEFAULT_KEY = 0x1
 
-def get_node_attribute(graph: DiGraph, name: str, attr: str) -> str:
+
+def get_node_attribute(
+    graph: DiGraph, name: str, attr: str, default: str = ''
+) -> str:
     return normalize_name(
         graph.nodes[name]
         .get('config', namedtuple('config', ('obj_dict',))({}))
         .obj_dict.get('attributes', {})
-        .get(attr, '')
+        .get(attr, default)
     )
 
 
@@ -111,7 +116,11 @@ def get_interface_addresses(graph: DiGraph, name: str) -> Generator[str]:
 
 
 async def process_node(
-    ipr_stack: deque[AsyncIPRoute], graph: DiGraph, name: str, present: bool
+    ipr_stack: deque[AsyncIPRoute],
+    graph: DiGraph,
+    name: str,
+    present: bool,
+    mask: int = DEFAULT_MASK,
 ) -> None:
     '''Process an interface and upwards.
 
@@ -127,6 +136,14 @@ async def process_node(
     * SRv6
     * MPLS
     '''
+    try:
+        key = int(get_node_attribute(graph, name, 'key', str(DEFAULT_KEY)))
+    except ValueError:
+        return
+    if not key & mask:
+        logging.info(f'skip node {name}: key={key}, mask={mask}')
+        return
+    logging.info(f'process node {name}: key={key}, mask={mask}')
     # we start from the interface
     if get_node_attribute(graph, name, 'type') != 'interface':
         qname_args = name.split(':')
@@ -147,7 +164,9 @@ async def process_node(
                 )
                 == 0
             ):
-                await process_node(ipr_stack, graph, qname.ifname, present)
+                await process_node(
+                    ipr_stack, graph, qname.ifname, present, mask
+                )
                 return
         logging.info(f'skip node {name}')
         return
@@ -269,7 +288,7 @@ async def process_node(
                 index=await ipr_stack[-1].link_lookup(ifname),
             )
     for pre_node in graph.predecessors(name):
-        await process_node(ipr_stack, graph, pre_node, present)
+        await process_node(ipr_stack, graph, pre_node, present, mask)
 
     # cleanup netns
     if subgraph_type == 'netns':
@@ -286,7 +305,9 @@ def load_source(url):
         return source.read().decode('utf-8')
 
 
-async def ensure(present: bool, data: str) -> DiGraph:
+async def ensure(
+    present: bool, data: str, mask: int = DEFAULT_MASK
+) -> DiGraph:
     pydot_graph_list: list[Dot] | None
     pydot_graph: Dot
     nx_graph: DiGraph = DiGraph()
@@ -302,7 +323,7 @@ async def ensure(present: bool, data: str) -> DiGraph:
         for n in nx_graph.nodes:
             if nx_graph.out_degree(n) > 0:
                 continue
-            await process_node(ipr_stack, nx_graph, n, present)
+            await process_node(ipr_stack, nx_graph, n, present, mask)
     finally:
         for ipr in ipr_stack:
             ipr.close()
@@ -315,9 +336,16 @@ def run() -> None:
     )
     aparser.add_argument('action')
     aparser.add_argument('filename')
+    aparser.add_argument(
+        '--mask', type=int, default=DEFAULT_MASK, required=False
+    )
     args = aparser.parse_args()
     data = load_source(args.filename)
-    asyncio.run(ensure(present=args.action.lower() != 'down', data=data))
+    asyncio.run(
+        ensure(
+            present=args.action.lower() != 'down', data=data, mask=args.mask
+        )
+    )
 
 
 if __name__ == '__main__':
