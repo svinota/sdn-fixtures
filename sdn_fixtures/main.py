@@ -54,9 +54,16 @@ def normalize_name(name: str) -> str:
     return name
 
 
+def get_subgraph(graph: DiGraph, name: str) -> Subgraph:
+    return (
+        graph.nodes[name]['config']
+        .obj_dict.get('attributes', {})
+        .get('subgraph')
+    )
+
+
 def get_subgraph_spec(graph: DiGraph, name: str) -> tuple[str, str]:
-    attrs = graph.nodes[name]['config'].obj_dict.get('attributes', {})
-    subgraph = attrs.get('subgraph')
+    subgraph = get_subgraph(graph, name)
     if subgraph is None:
         return ('', '')
     return (get_subgraph_label(subgraph), get_subgraph_type(subgraph))
@@ -195,7 +202,11 @@ async def process_node(
     ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
-        net_ns_fd = get_node_attribute(graph, name, 'fd', '0')
+        net_ns_fd = normalize_name(
+            get_subgraph(graph, name)
+            .obj_dict.get('attributes', {})
+            .get('fd', '0')
+        )
         try:
             net_ns_fd = int(net_ns_fd)
         except ValueError:
