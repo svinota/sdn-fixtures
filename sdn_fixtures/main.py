@@ -247,6 +247,9 @@ async def process_node(
     # setup vxlan
     if present and kind == 'vxlan':
         spec['vxlan_id'] = int(get_node_attribute(graph, name, 'vxlan_id'))
+        spec['vxlan_group'] = get_node_attribute(
+            graph, name, 'vxlan_group', '239.1.1.1'
+        )
         for x in graph.successors(name):
             if get_node_attribute(graph, x, 'kind') != 'bridge':
                 spec['vxlan_link'] = (
