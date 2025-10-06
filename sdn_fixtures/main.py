@@ -188,6 +188,7 @@ async def process_node(
     kind: str
     ifname: str
     ipr_idx: int
+    net_ns_fd: int | str
 
     kind = get_node_attribute(graph, name, 'kind')
     ifname = get_node_attribute(graph, name, 'label')
@@ -206,9 +207,19 @@ async def process_node(
     ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
+        net_ns_fd = get_subgraph_attribute(
+            get_subgraph(graph, name), 'fd', '0'
+        )
+        try:
+            net_ns_fd = int(net_ns_fd)
+        except ValueError:
+            logging.error(f'skip node {name}: net_ns_fd={net_ns_fd}')
+            return
+        if net_ns_fd <= 0:
+            net_ns_fd = subgraph
         if present:
-            logging.info(f'ensure netns={subgraph}')
-            ipr_stack.append(AsyncIPRoute(netns=subgraph))
+            logging.info(f'ensure netns={net_ns_fd}')
+            ipr_stack.append(AsyncIPRoute(netns=net_ns_fd))
             await ipr_stack[-1].setup_endpoint()
             ipr_idx = -2
         else:
@@ -232,16 +243,6 @@ async def process_node(
             spec['ifname'] = uifname()
         peer: dict[str, str | int] = {'ifname': ifname}
         if subgraph_type == 'netns':
-            net_ns_fd: str | int = get_subgraph_attribute(
-                get_subgraph(graph, name), 'fd', '0'
-            )
-            try:
-                net_ns_fd = int(net_ns_fd)
-            except ValueError:
-                logging.error(f'skip node {name}: net_ns_fd={net_ns_fd}')
-                return
-            if net_ns_fd <= 0:
-                net_ns_fd = subgraph
             peer['net_ns_fd'] = net_ns_fd
         spec['peer'] = peer
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
