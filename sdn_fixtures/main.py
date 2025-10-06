@@ -54,9 +54,21 @@ def normalize_name(name: str) -> str:
     return name
 
 
-def get_subgraph_attribute(graph: DiGraph, name: str) -> tuple[str, str]:
+def get_subgraph(graph: DiGraph, name: str) -> Subgraph:
     attrs = graph.nodes[name]['config'].obj_dict.get('attributes', {})
-    subgraph = attrs.get('subgraph')
+    return attrs.get('subgraph')
+
+
+def get_subgraph_attribute(
+    subgraph: Subgraph, name: str, default: str = ''
+) -> str:
+    if subgraph is None:
+        return default
+    return subgraph.obj_dict.get('attributes', {}).get(name, default)
+
+
+def get_subgraph_spec(graph: DiGraph, name: str) -> tuple[str, str]:
+    subgraph = get_subgraph(graph, name)
     if subgraph is None:
         return ('', '')
     return (get_subgraph_label(subgraph), get_subgraph_type(subgraph))
@@ -170,7 +182,7 @@ async def process_node(
                 return
         logging.info(f'skip node {name}')
         return
-    spec: dict[str, int | str | dict[str, str]]
+    spec: dict[str, int | str | dict[str, str | int]]
     subgraph: str
     subgraph_type: str
     kind: str
@@ -179,7 +191,7 @@ async def process_node(
 
     kind = get_node_attribute(graph, name, 'kind')
     ifname = get_node_attribute(graph, name, 'label')
-    subgraph, subgraph_type = get_subgraph_attribute(graph, name)
+    subgraph, subgraph_type = get_subgraph_spec(graph, name)
     logging.info(
         f'process interface node {name}: ifname={ifname}, kind={kind}'
     )
@@ -218,10 +230,10 @@ async def process_node(
             )[0].get('ifname')
         else:
             spec['ifname'] = uifname()
-        peer = {'ifname': ifname}
+        peer: dict[str, str | int] = {'ifname': ifname}
         if subgraph_type == 'netns':
-            net_ns_fd = (
-                graph.nodes[name].obj_dict.get('attributes', {}).get('fd', '0')
+            net_ns_fd: str | int = get_subgraph_attribute(
+                get_subgraph(graph, name), 'fd', '0'
             )
             try:
                 net_ns_fd = int(net_ns_fd)
