@@ -298,12 +298,16 @@ async def process_node(
                 or subgraph.strip('vrf')
             )
         )
+        vrf_ifname = (
+            get_subgraph_attribute(get_subgraph(graph, name), 'ifname')
+            or subgraph
+        )
         logging.info(f'ensure vrf={subgraph}')
         vrf = await ipr_stack[-1].ensure(
             ipr_stack[-1].link,
             present=present,
             **{
-                'ifname': subgraph,
+                'ifname': vrf_ifname,
                 'kind': 'vrf',
                 'vrf_table': vrf_table,
                 'state': 'up',
