@@ -32,9 +32,11 @@ def get_node_attribute(
     )
 
 
-def get_subgraph_label(subgraph: Subgraph) -> str:
+def get_subgraph_attribute(
+    subgraph: Subgraph, name: str, default: str = ''
+) -> str:
     return normalize_name(
-        subgraph.obj_dict.get('attributes', {}).get('label', '')
+        subgraph.obj_dict.get('attributes', {}).get(name, default)
     )
 
 
@@ -43,7 +45,7 @@ def get_subgraph_type(subgraph: Subgraph) -> str:
     if ret:
         return ret
     for key in ('vrf', 'netns'):
-        if get_subgraph_label(subgraph).startswith(key):
+        if get_subgraph_attribute(subgraph, 'label').startswith(key):
             return key
     return ''
 
@@ -66,7 +68,10 @@ def get_subgraph_spec(graph: DiGraph, name: str) -> tuple[str, str]:
     subgraph = get_subgraph(graph, name)
     if subgraph is None:
         return ('', '')
-    return (get_subgraph_label(subgraph), get_subgraph_type(subgraph))
+    return (
+        get_subgraph_attribute(subgraph, 'label'),
+        get_subgraph_type(subgraph),
+    )
 
 
 def set_subgraph_attribute(
@@ -287,6 +292,12 @@ async def process_node(
 
     # setup VRF
     if subgraph_type == 'vrf':
+        vrf_table = abs(
+            int(
+                get_subgraph_attribute(get_subgraph(graph, name), 'table')
+                or subgraph.strip('vrf')
+            )
+        )
         logging.info(f'ensure vrf={subgraph}')
         vrf = await ipr_stack[-1].ensure(
             ipr_stack[-1].link,
@@ -294,7 +305,7 @@ async def process_node(
             **{
                 'ifname': subgraph,
                 'kind': 'vrf',
-                'vrf_table': abs(int(subgraph.strip('vrf'))),
+                'vrf_table': vrf_table,
                 'state': 'up',
             },
         )
