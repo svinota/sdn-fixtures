@@ -40,6 +40,10 @@ def get_subgraph_attribute(
     )
 
 
+def set_subgraph_attribute(subgraph: Subgraph, name: str, value: str) -> None:
+    subgraph.obj_dict.get('attributes', {})[name] = value
+
+
 def get_subgraph_type(subgraph: Subgraph) -> str:
     ret = subgraph.obj_dict.get('attributes', {}).get('type')
     if ret:
@@ -74,9 +78,7 @@ def get_subgraph_spec(graph: DiGraph, name: str) -> tuple[str, str]:
     )
 
 
-def set_subgraph_attribute(
-    target: Node | Edge, subgraph: Subgraph | Dot
-) -> None:
+def set_subgraph(target: Node | Edge, subgraph: Subgraph | Dot) -> None:
     if not isinstance(subgraph, Subgraph):
         return
     if 'attributes' not in target.obj_dict:
@@ -87,12 +89,12 @@ def set_subgraph_attribute(
 def load_subgraph(graph: Dot | Subgraph, target: DiGraph) -> None:
     for node in graph.get_nodes():
         key = normalize_name(node.get_name())
-        set_subgraph_attribute(node, graph)
+        set_subgraph(node, graph)
         target.add_node(key)
         target.nodes[key]['config'] = node
 
     for edge in graph.get_edges():
-        set_subgraph_attribute(edge, graph)
+        set_subgraph(edge, graph)
         target.add_edge(*(normalize_name(x) for x in edge.obj_dict['points']))
 
     for subgraph in graph.get_subgraphs():
@@ -207,6 +209,9 @@ async def process_node(
     ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
+        if get_subgraph_attribute(get_subgraph(graph, name), 'remove'):
+            return
+
         net_ns_fd = normalize_name(
             get_subgraph(graph, name)
             .obj_dict.get('attributes', {})
@@ -223,15 +228,18 @@ async def process_node(
             logging.info(f'ensure netns={net_ns_fd}')
             ipr_stack.append(AsyncIPRoute(netns=net_ns_fd))
             await ipr_stack[-1].setup_endpoint()
-            ipr_idx = -2
         else:
             try:
+                set_subgraph_attribute(
+                    get_subgraph(graph, name), 'removed', 'true'
+                )
                 netns.remove(subgraph)
             except FileNotFoundError:
-                pass
+                return
 
     # setup veth
     if present and kind == 'veth':
+        ipr_idx = -2
         link = [
             x.get('link')
             async for x in await ipr_stack[-1].link('dump')
@@ -275,9 +283,13 @@ async def process_node(
     if master and present:
         spec['master'] = master[0]
     logging.info(f'ensure interface {spec}')
-    interface = await ipr_stack[ipr_idx].ensure(
-        ipr_stack[ipr_idx].link, present=present, **spec
-    )
+    try:
+        interface = await ipr_stack[ipr_idx].ensure(
+            ipr_stack[ipr_idx].link, present=present, **spec
+        )
+    except Exception as e:
+        breakpoint()
+        print(e)
 
     # post-init: enforce state
     #
@@ -350,6 +362,7 @@ async def ensure(
     pydot_graph: Dot
     nx_graph: DiGraph = DiGraph()
     ipr_stack: deque[AsyncIPRoute] = deque([AsyncIPRoute()])
+    logging.info(f'running present={present}')
 
     pydot_graph_list = pydot.graph_from_dot_data(data)
     if pydot_graph_list is not None:
