@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import shlex
+import subprocess
 import urllib.request
 from collections import deque, namedtuple
 from collections.abc import Generator
@@ -17,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 
 Qname = namedtuple('Qname', ('ifname', 'section'))
 
-DEFAULT_MASK = 0xFFFFFFFF
+DEFAULT_MASK = 0xFF
 DEFAULT_KEY = 0x1
 
 
@@ -101,6 +102,47 @@ def load_subgraph(graph: Dot | Subgraph, target: DiGraph) -> None:
         load_subgraph(subgraph, target)
 
 
+def parse_sysctl_from(graph: DiGraph, name: str, label: str):
+    sysctl_def = (
+        graph.nodes[name]['config']
+        .obj_dict.get('attributes', {})
+        .get(label, '')
+    )
+    for sysctl_str in shlex.split(sysctl_def):
+        lines = sysctl_str.split('\\n')
+        for line in lines:
+            yield line
+
+
+def parse_route_from(graph: DiGraph, name: str, label: str):
+    route_def = (
+        graph.nodes[name]['config']
+        .obj_dict.get('attributes', {})
+        .get(label, '')
+    )
+    for route_str in shlex.split(route_def):
+        lines = route_str.split('\\n')
+        for line in lines:
+            route: dict[str, str | int | dict[str, str]] = {}
+            encap: None | dict[str, str] = None
+            s = shlex.shlex()
+            s.wordchars += ':./,'
+            s.push_source(line)
+            while token := s.read_token():
+                if 'dst' not in route:
+                    route['dst'] = token
+                    continue
+                if token == 'encap':
+                    encap = {}
+                    route['encap'] = encap
+                    continue
+                if encap is not None:
+                    encap[token] = s.read_token() or ''
+                    continue
+                route[token] = s.read_token() or ''
+            yield route
+
+
 def parse_addresses_from(graph: DiGraph, name: str, label: str):
     config = graph.nodes[name]['config']
     address_str = (
@@ -117,6 +159,13 @@ def get_interface_name(graph: DiGraph, name: str) -> str:
     if not label:
         return name
     return label
+
+
+def get_interface_routes(graph: DiGraph, name: str):
+    sub_name = f'{name}:route'
+    if sub_name in graph:
+        for route in parse_route_from(graph, sub_name, 'label'):
+            yield route
 
 
 def get_interface_addresses(graph: DiGraph, name: str) -> Generator[str]:
@@ -159,7 +208,7 @@ async def process_node(
         return
     logging.info(f'process node {name}: key={key}, mask={mask}')
     # we start from the interface
-    if get_node_attribute(graph, name, 'type') != 'interface':
+    if get_node_attribute(graph, name, 'type') not in ('interface', 'sysctl'):
         qname_args = name.split(':')
         if len(qname_args) != 2:
             return
@@ -190,23 +239,9 @@ async def process_node(
     kind: str
     ifname: str
     ipr_idx: int
-    net_ns_fd: int | str
-
-    kind = get_node_attribute(graph, name, 'kind')
-    ifname = get_node_attribute(graph, name, 'label')
+    net_ns_fd: int | str | None = None
     subgraph, subgraph_type = get_subgraph_spec(graph, name)
-    logging.info(
-        f'process interface node {name}: ifname={ifname}, kind={kind}'
-    )
-    spec = {
-        'ifname': ifname,
-        'state': get_node_attribute(graph, name, 'state') or 'up',
-    }
 
-    if kind is not None:
-        spec['kind'] = kind
-
-    ipr_idx = -1
     # setup netns
     if subgraph_type == 'netns':
         if get_subgraph_attribute(get_subgraph(graph, name), 'remove'):
@@ -224,6 +259,31 @@ async def process_node(
             return
         if net_ns_fd <= 0:
             net_ns_fd = subgraph
+
+    if get_node_attribute(graph, name, 'type') == 'sysctl':
+        if present:
+            if net_ns_fd is not None:
+                netns.pushns(net_ns_fd)
+            sysctl = list(parse_sysctl_from(graph, name, 'label'))
+            logging.info(f'run sysctl {sysctl}')
+            subprocess.run(['sysctl', '-q', '-w'] + sysctl)
+            if net_ns_fd is not None:
+                netns.popns()
+        return
+    kind = get_node_attribute(graph, name, 'kind')
+    ifname = get_node_attribute(graph, name, 'label')
+    logging.info(
+        f'process interface node {name}: ifname={ifname}, kind={kind}'
+    )
+    spec = {
+        'ifname': ifname,
+        'state': get_node_attribute(graph, name, 'state') or 'up',
+    }
+    if kind is not None:
+        spec['kind'] = kind
+    ipr_idx = -1
+    logging.info(f'net_ns_fd: {net_ns_fd}')
+    if net_ns_fd is not None:
         if present:
             logging.info(f'ensure netns={net_ns_fd}')
             ipr_stack.append(AsyncIPRoute(netns=net_ns_fd))
@@ -235,7 +295,8 @@ async def process_node(
                 )
                 netns.remove(subgraph)
             except FileNotFoundError:
-                return
+                pass
+            return
 
     # setup veth
     if present and kind == 'veth':
@@ -252,7 +313,7 @@ async def process_node(
         else:
             spec['ifname'] = uifname()
         peer: dict[str, str | int] = {'ifname': ifname}
-        if subgraph_type == 'netns':
+        if subgraph_type == 'netns' and net_ns_fd is not None:
             peer['net_ns_fd'] = net_ns_fd
         spec['peer'] = peer
         logging.info(f'veth peer={ifname}, uplink={spec["ifname"]}')
@@ -337,6 +398,10 @@ async def process_node(
                 address=address,
                 index=await ipr_stack[-1].link_lookup(ifname),
             )
+        for route in get_interface_routes(graph, name):
+            logging.info(f'interface {name}/{ifname} route: {route}')
+            oif = await ipr_stack[-1].link_lookup(ifname)
+            await ipr_stack[-1].route('replace', oif=oif, **route)
     for pre_node in graph.predecessors(name):
         await process_node(ipr_stack, graph, pre_node, present, mask)
 
