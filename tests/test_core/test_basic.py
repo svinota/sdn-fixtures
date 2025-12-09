@@ -4,29 +4,26 @@ from pyroute2 import AsyncIPRoute
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'async_sdn_segment',
+    'sdn',
     (
         {
-            'template': '''
+            'yaml': '''
 
-digraph G {
-    "$ifname" [
-        type=interface,
-        kind=dummy,
-        label=$ifname,
-        ipaddr="192.168.110.20/24"
-    ];
-}
-        '''
+segment:
+    - interface: test
+      ifname: {uifname()}
+      kind: dummy
+      ipaddr: {allocate()}
+'''
         },
     ),
     ids=['dummy'],
     indirect=True,
 )
-async def test_parametrize(async_ipr, async_sdn_segment, ifname):
+async def test_parametrize(async_ipr, sdn):
     async with AsyncIPRoute() as ipr:
-        idx = await ipr.link_lookup(ifname)
-        assert idx
+        idx = await ipr.link_lookup(sdn.interfaces['test']['ifname'])
+        assert len(idx) == 1 and idx[0] == sdn.interfaces['test']['index']
         addr = await ipr.poll(
             ipr.addr, 'dump', address='192.168.110.20', index=idx
         )

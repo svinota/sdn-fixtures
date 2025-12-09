@@ -272,6 +272,11 @@ async def process_node(
         return
     kind = get_node_attribute(graph, name, 'kind')
     ifname = get_node_attribute(graph, name, 'label')
+    sysctl = [
+        urlparse(x)
+        for x in get_node_attribute(graph, name, 'sysctl').split(';')
+        if len(x) > 0
+    ]
     logging.info(
         f'process interface node {name}: ifname={ifname}, kind={kind}'
     )
@@ -343,14 +348,13 @@ async def process_node(
             break
     if master and present:
         spec['master'] = master[0]
+
+    #
+    #
     logging.info(f'ensure interface {spec}')
-    try:
-        interface = await ipr_stack[ipr_idx].ensure(
-            ipr_stack[ipr_idx].link, present=present, **spec
-        )
-    except Exception as e:
-        breakpoint()
-        print(e)
+    interface = await ipr_stack[ipr_idx].ensure(
+        ipr_stack[ipr_idx].link, present=present, **spec
+    )
 
     # post-init: enforce state
     #
@@ -362,6 +366,14 @@ async def process_node(
             index=await ipr_stack[-1].link_lookup(ifname),
             state=spec['state'],
         )
+
+    # post-init: setup sysctl parameters
+    #
+    if present:
+        for parameter in sysctl:
+            query = parameter.query.split('=')
+            with open(f'/sys/class/net/{spec["ifname"]}/{query[0]}', 'w') as f:
+                f.write(query[1])
 
     # setup VRF
     if subgraph_type == 'vrf':

@@ -3,8 +3,10 @@ digraph G {
     node [fillcolor="#ffffff", style=filled]
 
     subgraph cluster_v0 {
-        label="vrf1020";
+        label="default: vrf-1020";
         type=vrf;
+        ifname="vrf-1020";
+        table=1020;
         bgcolor="#f0f0f0";
 
         subgraph cluster_n0 {

@@ -8,9 +8,10 @@ digraph G {
         label="test-netns";
         type=netns;
 
-        "port0" [type=interface, kind=veth, label="test0"];
+        "port0" [type=interface, kind=veth, label="test0", sysctl="?brport/hairpin_mode=1", key=2];
         "port0:ip" [shape=note, label="10.100.0.11/24\n10.100.0.12/24"];
         "port0" -> "port0:ip" [style=dashed, dir=none];
+        "port1" [type=interface, kind=dummy, label="test1", key=2];
     }
 
     # The bridge in this example is located in the main network namespace.
