@@ -284,6 +284,9 @@ async def process_node(
         'ifname': ifname,
         'state': get_node_attribute(graph, name, 'state') or 'up',
     }
+    mtu = get_node_attribute(graph, name, 'mtu')
+    if mtu:
+        spec['mtu'] = int(mtu)
     if kind is not None:
         spec['kind'] = kind
     ipr_idx = -1
@@ -318,6 +321,8 @@ async def process_node(
         else:
             spec['ifname'] = uifname()
         peer: dict[str, str | int] = {'ifname': ifname}
+        if mtu:
+            peer['mtu'] = int(mtu)
         if subgraph_type == 'netns' and net_ns_fd is not None:
             peer['net_ns_fd'] = net_ns_fd
         spec['peer'] = peer
